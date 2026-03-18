@@ -11,7 +11,7 @@ AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # Use the URL where your app is hosted
-REDIRECT_URI = "http://localhost:8501" # Change to your Streamlit Cloud URL for deployment
+REDIRECT_URI = "https://hello-world-app-htf3pcrkd598aic2zm8ewj.streamlit.app/" # Change to your Streamlit Cloud URL for deployment
 
 st.title("📝 Save Text to Your Google Drive")
 
