@@ -1,4 +1,3 @@
 streamlit
-googletrans==4.0.0-rc1
-gtts
-legacy-cgi
+streamlit-oauth
+google-api-python-client

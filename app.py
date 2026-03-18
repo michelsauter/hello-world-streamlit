@@ -1,65 +1,62 @@
 import streamlit as st
-from googletrans import Translator
-from gtts import gTTS
-import urllib.parse
-import os
+from streamlit_oauth import OAuth2Component
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
 
-# Set up the page
-st.set_page_config(page_title="English to Khmer Tool", page_icon="🇰🇭")
-st.title("--- 🇰🇭 English to Khmer Tool ---")
+# 1. Configuration (Set these in Streamlit Secrets!)
+CLIENT_ID = st.secrets["AUTH"]["CLIENT_ID"]
+CLIENT_SECRET = st.secrets["AUTH"]["CLIENT_SECRET"]
+AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# Initialize the translator
-@st.cache_resource
-def get_translator():
-    return Translator()
+# Use the URL where your app is hosted
+REDIRECT_URI = "http://localhost:8501" # Change to your Streamlit Cloud URL for deployment
 
-translator = get_translator()
+st.title("📝 Save Text to Your Google Drive")
 
-# 1. UI Elements - Text Input
-en_text = st.text_input("English:", value="Where can I find good food?")
+# 2. Setup OAuth Component
+oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_URL, TOKEN_URL, TOKEN_URL, "")
 
-# Create a layout for our buttons
-col1, col2 = st.columns([1, 1])
+if "auth" not in st.session_state:
+    # Show Login Button
+    result = oauth2.authorize_button(
+        name="Login with Google",
+        scope="https://www.googleapis.com/auth/drive.file",
+        redirect_uri=REDIRECT_URI,
+    )
+    if result:
+        st.session_state.auth = result
+        st.rerun()
+else:
+    # User is Logged In
+    st.success("Logged in successfully!")
+    
+    # 3. User Interface
+    user_text = st.text_area("Enter text to save to your Drive:", "Hello from Streamlit!")
+    file_name = st.text_input("File Name:", "my_text_file.txt")
 
-# Generate the Google Translate URL for the backup button
-query = urllib.parse.quote(en_text)
-google_url = f"https://translate.google.com/?sl=en&tl=km&text={query}&op=translate"
+    if st.button("🚀 Save to My Drive"):
+        try:
+            # Build the Drive service using the user's token
+            token = st.session_state.auth['token']['access_token']
+            from google.oauth2.credentials import Credentials
+            creds = Credentials(token)
+            service = build('drive', 'v3', credentials=creds)
 
-# 2. Backup Button (Streamlit handles external links natively)
-with col2:
-    st.link_button("🌐 Open in Google Translate", url=google_url)
+            # Prepare the file content
+            file_metadata = {'name': file_name}
+            media = MediaIoBaseUpload(io.BytesIO(user_text.encode()), mimetype='text/plain')
 
-# 3. Translation Function & Button
-with col1:
-    if st.button("🔊 Translate & Play", type="primary"):
-        if not en_text.strip():
-            st.warning("Please enter some text to translate.")
-        else:
-            with st.spinner("Translating..."):
-                try:
-                    # Translate text
-                    res = translator.translate(en_text, src='en', dest='km')
+            # Upload to Drive
+            file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            
+            st.balloons()
+            st.success(f"File saved! File ID: {file.get('id')}")
+            
+        except Exception as e:
+            st.error(f"Error saving to Drive: {e}")
 
-                    # Robust phonetic check
-                    phonetic = res.pronunciation
-                    if not phonetic:
-                        try:
-                            phonetic = res.extra_data['translation'][1][3]
-                        except:
-                            phonetic = "Click 'Open in Google Translate' to see phonetics!"
-
-                    # Display results
-                    st.success("Translation Complete!")
-                    st.write(f"🇰🇭 **Khmer:** {res.text}")
-                    st.write(f"🗣️ **Phonetic:** {phonetic}")
-
-                    # Generate and play audio
-                    audio_file = "final_audio.mp3"
-                    tts = gTTS(text=res.text, lang='km')
-                    tts.save(audio_file)
-                    
-                    # Streamlit's native audio player with autoplay
-                    st.audio(audio_file, format="audio/mp3", autoplay=True)
-
-                except Exception as e:
-                    st.error(f"Connection error. Try the Google Translate button! Error: {e}")
+    if st.button("Logout"):
+        del st.session_state.auth
+        st.rerun()
